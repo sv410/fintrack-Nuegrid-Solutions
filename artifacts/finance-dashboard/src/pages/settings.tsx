@@ -1,10 +1,12 @@
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/lib/auth";
+import { useCurrency, CURRENCIES } from "@/lib/currency";
 import { useState } from "react";
 import { User, Bell, Shield, Palette, ChevronRight } from "lucide-react";
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const { currency, setCurrency } = useCurrency();
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [saved, setSaved] = useState(false);
@@ -88,11 +90,19 @@ export default function SettingsPage() {
                     <label className="block text-[10px] font-bold tracking-[0.12em] uppercase text-muted-foreground mb-2">
                       Currency
                     </label>
-                    <select className="w-full px-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 transition-all appearance-none">
-                      <option value="USD">USD — US Dollar ($)</option>
-                      <option value="EUR">EUR — Euro (€)</option>
-                      <option value="GBP">GBP — British Pound (£)</option>
-                      <option value="INR">INR — Indian Rupee (₹)</option>
+                    <select
+                      value={currency.code}
+                      onChange={(e) => {
+                        const found = CURRENCIES.find((c) => c.code === e.target.value);
+                        if (found) setCurrency(found);
+                      }}
+                      className="w-full px-4 py-3 rounded-xl border border-border bg-background text-sm focus:outline-none focus:ring-2 transition-all appearance-none"
+                    >
+                      {CURRENCIES.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} — {c.name} ({c.symbol})
+                        </option>
+                      ))}
                     </select>
                   </div>
 

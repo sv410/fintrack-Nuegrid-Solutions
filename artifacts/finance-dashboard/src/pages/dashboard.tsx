@@ -13,16 +13,15 @@ import { SpendingChart } from "@/components/spending-chart";
 import { AiInsightCard } from "@/components/ai-insight-card";
 import { ArrowDownRight, ArrowUpRight, TrendingUp, Wallet } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useCurrency } from "@/lib/currency";
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { format: fmt } = useCurrency();
   const { data: summary, isLoading: loadingSummary } = useGetTransactionSummary({ query: { enabled: true } });
   const { data: transactions, isLoading: loadingTransactions } = useListTransactions(undefined, { query: { enabled: true } });
   const { data: spending, isLoading: loadingSpending } = useGetSpendingByCategory({ query: { enabled: true } });
   const { data: insight, isLoading: loadingInsight } = useGetSpendingInsight({ query: { enabled: true } });
-
-  const fmt = (val: number) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(val);
 
   return (
     <Layout>

@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { useDeleteTransaction, getListTransactionsQueryKey, getGetTransactionSummaryQueryKey, getGetSpendingByCategoryQueryKey, getGetSpendingInsightQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Transaction } from "@workspace/api-client-react";
+import { useCurrency } from "@/lib/currency";
 
 export function TransactionList({ transactions }: { transactions: Transaction[] }) {
   const queryClient = useQueryClient();
   const deleteTx = useDeleteTransaction();
+  const { format: fmt } = useCurrency();
 
   const handleDelete = (id: number) => {
     deleteTx.mutate({ id }, {
@@ -51,7 +53,7 @@ export function TransactionList({ transactions }: { transactions: Transaction[] 
           </div>
           <div className="flex items-center gap-4">
             <span className={`font-semibold tracking-tight ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {tx.type === 'income' ? '+' : '-'}${tx.amount.toFixed(2)}
+              {tx.type === 'income' ? '+' : '-'}{fmt(tx.amount)}
             </span>
             <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => handleDelete(tx.id)} disabled={deleteTx.isPending}>
               <Trash2 className="w-4 h-4" />
