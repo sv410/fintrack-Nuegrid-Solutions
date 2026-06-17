@@ -1,6 +1,7 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { IncomingMessage, ServerResponse } from "http";
 import app from "../artifacts/api-server/src/app";
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
-  return app(req, res as unknown as import("express").Response);
+export default function handler(req: IncomingMessage, res: ServerResponse) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return app(req as any, res as any);
 }
