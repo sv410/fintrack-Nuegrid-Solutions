@@ -2,7 +2,6 @@
   "version": 2,
   "installCommand": "pnpm install",
   "buildCommand": "BASE_PATH=/ pnpm --filter @workspace/finance-dashboard run build",
-  "outputDirectory": "artifacts/finance-dashboard/dist/public",
   "functions": {
     "api/handler.ts": {
       "maxDuration": 30,
