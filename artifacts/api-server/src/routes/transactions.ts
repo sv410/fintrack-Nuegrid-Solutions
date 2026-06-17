@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, transactionsTable } from "@workspace/db";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
+import OpenAI from "openai";
 import {
   ListTransactionsQueryParams,
   CreateTransactionBody,
@@ -9,10 +10,13 @@ import {
 
 const router = Router();
 
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
+
 router.get("/transactions/summary", async (_req, res) => {
   try {
     const all = await db.select().from(transactionsTable);
-
     let totalIncome = 0;
     let totalExpense = 0;
     const categoryMap: Record<string, number> = {};
@@ -37,7 +41,7 @@ router.get("/transactions/summary", async (_req, res) => {
       topCategory,
       transactionCount: all.length,
     });
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Failed to compute summary" });
   }
 });
@@ -56,7 +60,7 @@ router.get("/transactions/by-category", async (_req, res) => {
       .orderBy(sql`SUM(${transactionsTable.amount}) DESC`);
 
     res.json(rows);
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Failed to compute category breakdown" });
   }
 });
@@ -68,8 +72,6 @@ router.get("/transactions/insight", async (_req, res) => {
     let totalIncome = 0;
     let totalExpense = 0;
     const categoryMap: Record<string, number> = {};
-    const recent30 = new Date();
-    recent30.setDate(recent30.getDate() - 30);
 
     for (const t of all) {
       const amount = parseFloat(t.amount);
@@ -87,60 +89,112 @@ router.get("/transactions/insight", async (_req, res) => {
     if (all.length === 0) {
       res.json({
         type: "neutral",
-        message: "No transactions yet",
-        detail: "Add your first transaction to start getting personalized insights about your spending.",
+        message: "Add your first transaction to get a personalized AI insight about your spending patterns and financial health.",
+        detail: "No transactions recorded yet — start logging to unlock insights.",
       });
       return;
     }
 
-    if (totalExpense > totalIncome) {
-      res.json({
-        type: "warning",
-        message: "Spending exceeds income",
-        detail: `You've spent $${(totalExpense - totalIncome).toFixed(2)} more than you've earned. Consider reviewing your ${topEntry?.[0] ?? "largest"} expenses.`,
-      });
-      return;
-    }
+    const ruleBasedDetail = getRuleBasedNote(totalIncome, totalExpense, topEntry, savingsRate);
+    const ruleType = getInsightType(totalIncome, totalExpense, savingsRate, topEntry);
 
-    if (topEntry && totalExpense > 0) {
-      const pct = Math.round((topEntry[1] / totalExpense) * 100);
-      if (pct >= 40) {
-        res.json({
-          type: "warning",
-          message: `${topEntry[0]} is ${pct}% of your spending`,
-          detail: `This category dominates your expenses. Reviewing it could free up significant budget.`,
+    if (openai) {
+      try {
+        const categoryBreakdown = Object.entries(categoryMap)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([cat, amt]) => `${cat}: $${amt.toFixed(2)}`)
+          .join(", ");
+
+        const prompt = `You are a friendly, direct personal finance coach. Analyze this user's spending data and write ONE concise paragraph (3-4 sentences) of personalized, actionable financial insight. Be specific with numbers. Sound like a knowledgeable friend, not a robot.
+
+Financial data:
+- Total Income: $${totalIncome.toFixed(2)}
+- Total Expenses: $${totalExpense.toFixed(2)}
+- Net Balance: $${(totalIncome - totalExpense).toFixed(2)}
+- Savings Rate: ${Math.round(savingsRate * 100)}%
+- Top spending categories: ${categoryBreakdown}
+- Total transactions: ${all.length}
+
+Write a 3-4 sentence insight paragraph only. No headers, no bullets. Be specific and encouraging.`;
+
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 180,
+          temperature: 0.7,
         });
-        return;
+
+        const aiText = response.choices[0]?.message?.content?.trim() ?? "";
+
+        if (aiText) {
+          res.json({
+            type: ruleType,
+            message: aiText,
+            detail: ruleBasedDetail,
+          });
+          return;
+        }
+      } catch {
+        // Fall through to rule-based
       }
     }
 
-    if (savingsRate >= 0.2) {
-      res.json({
-        type: "positive",
-        message: `Strong savings rate: ${Math.round(savingsRate * 100)}%`,
-        detail: `You're saving ${Math.round(savingsRate * 100)}% of your income. That puts you ahead of most people — keep it up.`,
-      });
-      return;
-    }
-
-    if (savingsRate > 0 && savingsRate < 0.1) {
-      res.json({
-        type: "tip",
-        message: "Savings rate is low",
-        detail: `You're saving ${Math.round(savingsRate * 100)}% of your income. Financial experts recommend saving at least 20%. Small cuts in "${topEntry?.[0] ?? "top categories"}" could make a big difference.`,
-      });
-      return;
-    }
-
     res.json({
-      type: "neutral",
-      message: "Finances look balanced",
-      detail: `Income and expenses are well-matched. Savings rate: ${Math.round(savingsRate * 100)}%. Keep tracking to spot trends over time.`,
+      type: ruleType,
+      message: getRuleBasedMessage(totalIncome, totalExpense, savingsRate, topEntry),
+      detail: ruleBasedDetail,
     });
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Failed to generate insight" });
   }
 });
+
+function getInsightType(
+  income: number,
+  expense: number,
+  rate: number,
+  top?: [string, number]
+): "warning" | "positive" | "neutral" | "tip" {
+  if (expense > income) return "warning";
+  if (top && expense > 0 && top[1] / expense >= 0.4) return "warning";
+  if (rate >= 0.2) return "positive";
+  if (rate < 0.1) return "tip";
+  return "neutral";
+}
+
+function getRuleBasedMessage(
+  income: number,
+  expense: number,
+  rate: number,
+  top?: [string, number]
+): string {
+  if (expense > income) {
+    return `Your spending of $${expense.toFixed(2)} exceeds your income of $${income.toFixed(2)} by $${(expense - income).toFixed(2)}. Reviewing your largest expense categories could help bring the balance back into positive territory quickly.`;
+  }
+  if (top && expense > 0 && top[1] / expense >= 0.4) {
+    const pct = Math.round((top[1] / expense) * 100);
+    return `You're in decent shape with a $${(income - expense).toFixed(2)} net balance — that's ${Math.round(rate * 100)}% of your income saved. Your biggest opportunity is ${top[0]} at $${top[1].toFixed(2)}, which is ${pct}% of total expenses. Setting a monthly budget for it could unlock significant savings.`;
+  }
+  if (rate >= 0.2) {
+    return `Strong work — you're saving ${Math.round(rate * 100)}% of your income with a net balance of $${(income - expense).toFixed(2)}. Your spending is well-distributed across categories. Keep this momentum and consider directing surplus funds into an emergency fund or investment account.`;
+  }
+  return `Your finances are balanced with a ${Math.round(rate * 100)}% savings rate and net balance of $${(income - expense).toFixed(2)}. Small, consistent cuts in your top spending categories could meaningfully improve your savings rate over time.`;
+}
+
+function getRuleBasedNote(
+  income: number,
+  expense: number,
+  top?: [string, number],
+  rate?: number
+): string {
+  if (expense > income) return `Spending exceeds income by $${(expense - income).toFixed(2)}.`;
+  if (top && expense > 0) {
+    const pct = Math.round((top[1] / expense) * 100);
+    return `${top[0]} is ${pct}% of expenses — ${pct >= 40 ? "heavy" : "notable"} concentration in a single category.`;
+  }
+  return `Savings rate: ${Math.round((rate ?? 0) * 100)}% — ${(rate ?? 0) >= 0.2 ? "above the recommended 20% target." : "below the recommended 20% target."}`;
+}
 
 router.get("/transactions", async (req, res) => {
   try {
@@ -151,7 +205,6 @@ router.get("/transactions", async (req, res) => {
     }
 
     const { category, type, startDate, endDate } = parseResult.data;
-
     const conditions = [];
     if (category) conditions.push(eq(transactionsTable.category, category));
     if (type) conditions.push(eq(transactionsTable.type, type as "income" | "expense"));
@@ -164,14 +217,14 @@ router.get("/transactions", async (req, res) => {
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(sql`${transactionsTable.date} DESC, ${transactionsTable.createdAt} DESC`);
 
-    const mapped = rows.map((r) => ({
-      ...r,
-      amount: parseFloat(r.amount),
-      createdAt: r.createdAt.toISOString(),
-    }));
-
-    res.json(mapped);
-  } catch (err) {
+    res.json(
+      rows.map((r) => ({
+        ...r,
+        amount: parseFloat(r.amount),
+        createdAt: r.createdAt.toISOString(),
+      }))
+    );
+  } catch {
     res.status(500).json({ error: "Failed to fetch transactions" });
   }
 });
@@ -185,16 +238,9 @@ router.post("/transactions", async (req, res) => {
     }
 
     const { amount, category, type, date, note } = parseResult.data;
-
     const [created] = await db
       .insert(transactionsTable)
-      .values({
-        amount: amount.toString(),
-        category,
-        type,
-        date,
-        note: note ?? null,
-      })
+      .values({ amount: amount.toString(), category, type, date, note: note ?? null })
       .returning();
 
     res.status(201).json({
@@ -202,7 +248,7 @@ router.post("/transactions", async (req, res) => {
       amount: parseFloat(created.amount),
       createdAt: created.createdAt.toISOString(),
     });
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Failed to create transaction" });
   }
 });
@@ -226,7 +272,7 @@ router.delete("/transactions/:id", async (req, res) => {
     }
 
     res.json({ success: true });
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Failed to delete transaction" });
   }
 });
