@@ -2,9 +2,15 @@ import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Wallet, LogOut, Settings } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
+const navItems = [
+  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/transactions", icon: Wallet, label: "Transactions" },
+  { href: "/settings", icon: Settings, label: "Settings" },
+];
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
 
   const handleLogout = () => {
     logout();
@@ -24,27 +30,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-1">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary font-medium text-sm"
-          >
-            <LayoutDashboard className="w-4 h-4" />
-            Dashboard
-          </Link>
-          <a
-            href="#"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-secondary/50 font-medium text-sm transition-colors"
-          >
-            <Wallet className="w-4 h-4" />
-            Transactions
-          </a>
-          <a
-            href="#"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-secondary/50 font-medium text-sm transition-colors"
-          >
-            <Settings className="w-4 h-4" />
-            Settings
-          </a>
+          {navItems.map(({ href, icon: Icon, label }) => {
+            const isActive = location === href;
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${
+                  isActive
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {label}
+              </Link>
+            );
+          })}
         </nav>
 
         <div className="p-4 border-t border-border/50 space-y-3">
