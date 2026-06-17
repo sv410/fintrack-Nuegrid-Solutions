@@ -8,26 +8,26 @@ const rawPort = process.env.PORT;
 const port = rawPort ? Number(rawPort) : 3000;
 const basePath = process.env.BASE_PATH ?? "/";
 
-export default defineConfig({
+const repoPublicDir = path.resolve(import.meta.dirname, "../../public");
+const localOutDir = path.resolve(import.meta.dirname, "dist/public");
+
+const replitPlugins =
+  process.env.NODE_ENV !== "production" && process.env.REPL_ID !== undefined
+    ? [
+        await import("@replit/vite-plugin-cartographer").then((m) =>
+          m.cartographer({
+            root: path.resolve(import.meta.dirname, ".."),
+          }),
+        ),
+        await import("@replit/vite-plugin-dev-banner").then((m) =>
+          m.devBanner(),
+        ),
+      ]
+    : [];
+
+export default defineConfig(({ command }) => ({
   base: basePath,
-  plugins: [
-    react(),
-    tailwindcss(),
-    runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
-      ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer({
-              root: path.resolve(import.meta.dirname, ".."),
-            }),
-          ),
-          await import("@replit/vite-plugin-dev-banner").then((m) =>
-            m.devBanner(),
-          ),
-        ]
-      : []),
-  ],
+  plugins: [react(), tailwindcss(), runtimeErrorOverlay(), ...replitPlugins],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
@@ -37,11 +37,9 @@ export default defineConfig({
   },
   root: path.resolve(import.meta.dirname),
   build: {
-    // Vercel serves static files from /public; local dev uses dist/public
-    outDir: process.env.VERCEL
-      ? path.resolve(import.meta.dirname, "../../public")
-      : path.resolve(import.meta.dirname, "dist/public"),
-    emptyOutDir: true,
+    // Production builds go to /public for Vercel static hosting.
+    outDir: command === "build" ? repoPublicDir : localOutDir,
+    emptyOutDir: command === "build",
   },
   server: {
     port,
@@ -63,4 +61,4 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
   },
-});
+}));

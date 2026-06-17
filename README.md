@@ -98,9 +98,10 @@ git push -u origin main
 
 ### 2. Import to Vercel
 
-1. Go to [vercel.com/new](https://vercel.com/new) and import your repository
-2. Vercel auto-detects the `vercel.json` configuration
-3. Set the following **Environment Variables** in your Vercel project settings:
+1. Go to [vercel.com/new](https://vercel.com/new) and import [sv410/fintrack-Nuegrid-Solutions](https://github.com/sv410/fintrack-Nuegrid-Solutions)
+2. **Root Directory** must be the repo root (leave blank) — do **not** set it to `artifacts/api-server`
+3. Under **Build & Output Settings**, turn **off** the Output Directory override (leave it empty). If it is set to `artifacts/finance-dashboard/dist/public`, Vercel will fail with a “No entrypoint found” error.
+4. Set the following **Environment Variables** in your Vercel project settings:
 
 | Variable | Required | Description |
 |---|---|---|

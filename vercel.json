@@ -1,5 +1,7 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
+  "framework": null,
   "installCommand": "pnpm install",
   "buildCommand": "BASE_PATH=/ pnpm --filter @workspace/finance-dashboard run build",
   "functions": {
@@ -9,7 +11,7 @@
     }
   },
   "routes": [
-    { "src": "/api/(.*)", "dest": "/api/handler.ts" },
+    { "src": "/api/(.*)", "dest": "/api/handler" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
