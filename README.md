@@ -113,7 +113,7 @@ git push -u origin main
 Click **Deploy**. Vercel will:
 - Install dependencies with `pnpm install`
 - Build the frontend static files
-- Bundle `api/handler.ts` as a serverless function
+- Bundle `api/index.ts` as a serverless function
 - Route `/api/*` to the serverless function and everything else to the SPA
 
 > **Tip**: Use [Neon](https://neon.tech) for a free serverless PostgreSQL database compatible with Vercel.
@@ -132,7 +132,7 @@ fintrack/
 │   ├── api-zod/           # Shared Zod validation schemas
 │   └── api-client-react/  # Generated TanStack Query hooks
 ├── api/
-│   └── handler.ts         # Vercel serverless function wrapper
+│   └── index.ts           # Vercel serverless function wrapper
 └── vercel.json            # Vercel deployment config
 ```
 
